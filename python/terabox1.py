@@ -127,7 +127,7 @@ class TeraboxLink():
                 streaming_params = {
                     'uk': self.dynamic_params['uk'],
                     'shareid': self.dynamic_params['shareid'],
-                    'type': 'M3U8_AUTO_1080',
+                    'type': 'M3U8_AUTO_360',
                     'fid': self.dynamic_params['fid_list'].strip('[]'),
                     'sign': self.dynamic_params['sign'],
                     'timestamp': self.dynamic_params['timestamp'],
