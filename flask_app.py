@@ -110,42 +110,111 @@ def get_download():
                 mimetype='application/json'
             )
 
+        print(f"[DEBUG] Processing URL: {url}")
+
         # Initialize TeraboxFile to get necessary tokens
         TF = TeraboxFile()
         TF.search(url)
         
+        print(f"[DEBUG] TeraboxFile Result: {TF.result}")
+        
         if TF.result['status'] != 'success':
+            print(f"[DEBUG] Failed status in TF result")
             return Response(
                 response=json.dumps({'status': 'failed', 'message': 'Could not fetch file info'}),
                 mimetype='application/json'
             )
 
-        # Get first file's info
-        first_file = TF.result['list'][0]
-        fs_id = first_file['fs_id']
-        
-        # Initialize TeraboxLink to get download and streaming URLs
-        TL = TeraboxLink(
-            fs_id=fs_id,
-            uk=TF.result['uk'],
-            shareid=TF.result['shareid'],
-            timestamp=TF.result['timestamp'],
-            sign=TF.result['sign'],
-            js_token=TF.result['js_token'],
-            cookie=TF.result['cookie']
-        )
-        TL.generate()
+        files_data = []
+        total_files = 0
 
-        # Create response with both download and streaming links
+        # Process all files in the list
+        def process_files(file_list):
+            nonlocal total_files
+            processed_files = []
+            print(f"[DEBUG] Processing file list: {file_list}")
+            
+            for file_item in file_list:
+                # Convert is_dir to boolean properly
+                is_dir = str(file_item['is_dir']) == '1'
+                if is_dir:
+                    print(f"[DEBUG] Found directory: {file_item['name']}")
+                    processed_files.extend(process_files(file_item['list']))
+                else:
+                    print(f"[DEBUG] Processing file: {file_item['name']}")
+                    total_files += 1
+                    TL = TeraboxLink(
+                        fs_id=file_item['fs_id'],
+                        uk=TF.result['uk'],
+                        shareid=TF.result['shareid'],
+                        timestamp=TF.result['timestamp'],
+                        sign=TF.result['sign'],
+                        js_token=TF.result['js_token'],
+                        cookie=TF.result['cookie']
+                    )
+                    TL.generate()
+                    print(f"[DEBUG] TeraboxLink Result: {TL.result}")
+                    
+                    file_data = {
+                        'name': file_item['name'],
+                        'size': file_item['size'],
+                        'type': file_item['type'],
+                        'download_link': TL.result['download_link'],
+                        'streaming_link': TL.result['streaming_link']
+                    }
+                    processed_files.append(file_data)
+            
+            return processed_files
+
+        print(f"[DEBUG] Checking result keys: {TF.result.keys()}")
+
+        # Check if it's a single file or a folder
+        if 'fs_id' in TF.result:
+            print("[DEBUG] Processing single file")
+            # Handle single file case
+            total_files = 1
+            TL = TeraboxLink(
+                fs_id=TF.result['fs_id'],
+                uk=TF.result['uk'],
+                shareid=TF.result['shareid'],
+                timestamp=TF.result['timestamp'],
+                sign=TF.result['sign'],
+                js_token=TF.result['js_token'],
+                cookie=TF.result['cookie']
+            )
+            TL.generate()
+            print(f"[DEBUG] Single file TeraboxLink Result: {TL.result}")
+            
+            files_data = [{
+                'name': TF.result.get('name', 'Unknown'),
+                'size': TF.result.get('size', ''),
+                'type': TF.result.get('type', 'other'),
+                'download_link': TL.result['download_link'],
+                'streaming_link': TL.result['streaming_link']
+            }]
+        elif TF.result.get('list'):
+            print("[DEBUG] Processing folder")
+            # Process all files starting from root
+            files_data = process_files(TF.result['list'])
+        else:
+            print("[DEBUG] No file or folder information found")
+            return Response(
+                response=json.dumps({
+                    'status': 'failed', 
+                    'message': 'Could not find file or folder information',
+                    'available_keys': list(TF.result.keys())
+                }),
+                mimetype='application/json'
+            )
+
+        print(f"[DEBUG] Final files_data: {files_data}")
+        print(f"[DEBUG] Total files found: {total_files}")
+
+        # Create response with all files' information
         response_data = {
-            'status': TL.result['status'],
-            'download_link': TL.result['download_link'],
-            'streaming_link': TL.result['streaming_link'],
-            'file_info': {
-                'name': first_file['name'],
-                'size': first_file['size'],
-                'type': first_file['type']
-            }
+            'status': 'success',
+            'total_files': total_files,
+            'files': files_data
         }
 
         return Response(
@@ -154,8 +223,15 @@ def get_download():
         )
 
     except Exception as e:
+        print(f"[DEBUG] Exception occurred: {str(e)}")
+        import traceback
+        print(f"[DEBUG] Traceback: {traceback.format_exc()}")
         return Response(
-            response=json.dumps({'status': 'failed', 'message': str(e)}),
+            response=json.dumps({
+                'status': 'failed', 
+                'message': f'Error processing request: {str(e)}',
+                'traceback': traceback.format_exc()
+            }),
             mimetype='application/json'
         )
 
