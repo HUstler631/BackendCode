@@ -286,7 +286,7 @@ def get_stream():
                         
                         # Use the TF object to get parameters that might change
                         TL = TeraboxLink(
-                            fs_id=file_item['fs_id'],  # or TF.result['fs_id'] for single file
+                            fs_id=file_item['fs_id'],
                             uk=TF.result['uk'],
                             shareid=TF.result['shareid'],
                             timestamp=TF.result['timestamp'],
@@ -295,12 +295,11 @@ def get_stream():
                             cookie=TF.result['cookie']
                         )
 
-                        # Just create the TL object but don't call generate()
-                        # Build our own streaming link with TL's parameters
+                        # Build streaming link with 1024tera.com format
                         params = {
                             'uk': TL.dynamic_params['uk'],
                             'shareid': TL.dynamic_params['shareid'],
-                            'type': 'M3U8_AUTO_360',
+                            'type': 'M3U8_FLV_264_480',
                             'fid': TL.dynamic_params['fid_list'].strip('[]'),
                             'sign': TL.dynamic_params['sign'],
                             'timestamp': TL.dynamic_params['timestamp'],
@@ -308,14 +307,14 @@ def get_stream():
                             'esl': '1',
                             'isplayer': '1',
                             'ehps': '1',
-                            'clienttype': TL.static_param['clienttype'],
-                            'app_id': TL.static_param['app_id'],
-                            'web': TL.static_param['web'],
-                            'channel': TL.static_param['channel']
+                            'clienttype': '0',
+                            'app_id': '250528',
+                            'web': '1',
+                            'channel': 'dubox'
                         }
 
-                        # Use the same URL format
-                        streaming_link = 'https://www.terabox.app/share/extstreaming.m3u8?' + '&'.join([f'{a}={b}' for a,b in params.items()])
+                        # Use the new URL format with 1024tera.com
+                        streaming_link = 'https://www.1024tera.com/share/streaming?' + '&'.join([f'{a}={b}' for a,b in params.items()])
                         print(f"[DEBUG] Generated streaming link: {streaming_link}")
                         
                         file_data = {
@@ -335,7 +334,7 @@ def get_stream():
                 
                 # Use the TF object to get parameters that might change
                 TL = TeraboxLink(
-                    fs_id=TF.result['fs_id'],  # or TF.result['fs_id'] for single file
+                    fs_id=TF.result['fs_id'],
                     uk=TF.result['uk'],
                     shareid=TF.result['shareid'],
                     timestamp=TF.result['timestamp'],
@@ -344,12 +343,11 @@ def get_stream():
                     cookie=TF.result['cookie']
                 )
 
-                # Just create the TL object but don't call generate()
-                # Build our own streaming link with TL's parameters
+                # Build streaming link with 1024tera.com format
                 params = {
                     'uk': TL.dynamic_params['uk'],
                     'shareid': TL.dynamic_params['shareid'],
-                    'type': 'M3U8_AUTO_360',
+                    'type': 'M3U8_FLV_264_480',
                     'fid': TL.dynamic_params['fid_list'].strip('[]'),
                     'sign': TL.dynamic_params['sign'],
                     'timestamp': TL.dynamic_params['timestamp'],
@@ -357,14 +355,14 @@ def get_stream():
                     'esl': '1',
                     'isplayer': '1',
                     'ehps': '1',
-                    'clienttype': TL.static_param['clienttype'],
-                    'app_id': TL.static_param['app_id'],
-                    'web': TL.static_param['web'],
-                    'channel': TL.static_param['channel']
+                    'clienttype': '0',
+                    'app_id': '250528',
+                    'web': '1',
+                    'channel': 'dubox'
                 }
 
-                # Use the same URL format
-                streaming_link = 'https://www.terabox.app/share/extstreaming.m3u8?' + '&'.join([f'{a}={b}' for a,b in params.items()])
+                # Use the new URL format with 1024tera.com
+                streaming_link = 'https://www.1024tera.com/share/streaming?' + '&'.join([f'{a}={b}' for a,b in params.items()])
                 print(f"[DEBUG] Generated streaming link for single file: {streaming_link}")
                 
                 files_data = [{
