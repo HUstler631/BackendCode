@@ -542,9 +542,51 @@ def get_stream():
 
         print(f"[DEBUG] Processing URL for streaming: {url}")
 
+        # Check URL format and validate before processing
+        valid_domains = ['terafileshare.com', '1024tera.com', 'terabox.com', '1024terabox.com', 
+                         'teraboxapp.com', 'dm.terabox.com', 'terasharelink.com']
+        
+        parsed_url = urlparse(url)
+        is_valid_domain = any(domain in parsed_url.netloc for domain in valid_domains)
+        
+        if not is_valid_domain:
+            return Response(
+                response=json.dumps({
+                    'status': 'failed', 
+                    'message': 'Invalid TeraBox URL format or unsupported domain'
+                }),
+                mimetype='application/json'
+            )
+            
+        # Handle short IDs (e.g., /s/1244) - could be invalid or malformed URLs
+        if parsed_url.path.startswith('/s/') and len(parsed_url.path) < 15:
+            path_parts = parsed_url.path.split('/')
+            short_id = path_parts[-1] if len(path_parts) > 2 else ''
+            
+            if len(short_id) < 5:  # Usually TeraBox IDs are longer
+                return Response(
+                    response=json.dumps({
+                        'status': 'failed', 
+                        'message': 'Invalid or incomplete TeraBox link ID'
+                    }),
+                    mimetype='application/json'
+                )
+
         # Initialize TeraboxFile to get necessary tokens
         TF = TeraboxFile()
-        TF.search(url)
+        try:
+            TF.search(url)
+        except AttributeError as e:
+            if "'NoneType' object has no attribute 'group'" in str(e):
+                return Response(
+                    response=json.dumps({
+                        'status': 'failed', 
+                        'message': 'URL format not recognized. Please use a standard TeraBox sharing link.'
+                    }),
+                    mimetype='application/json'
+                )
+            else:
+                raise e
         
         print(f"[DEBUG] TeraboxFile Result: {TF.result}")
         
@@ -568,8 +610,14 @@ def get_stream():
                 if is_dir:
                     processed_files.extend(process_files(file_item['list']))
                 else:
-                    # Only process video files for streaming
-                    if file_item['type'] == 'video':
+                    # Check for video files - either explicitly marked or by extension
+                    is_video = file_item.get('type') == 'video'
+                    if not is_video and 'name' in file_item:
+                        name = file_item['name'].lower()
+                        video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg']
+                        is_video = any(name.endswith(ext) for ext in video_extensions)
+                    
+                    if is_video:
                         total_files += 1
                         
                         # Use the TF object to get parameters that might change
@@ -610,7 +658,7 @@ def get_stream():
                         
                         file_data = {
                             'name': file_item['name'],
-                            'type': file_item['type'],
+                            'type': file_item['type'] if 'type' in file_item else 'video',
                             'streaming_link': streaming_link,
                             'segments': segments
                         }
@@ -620,8 +668,14 @@ def get_stream():
 
         # Check if it's a single file or a folder
         if 'fs_id' in TF.result:
-            # Handle single file case
-            if TF.result.get('type') == 'video':
+            # Check if it's marked as video or try to determine by extension
+            is_video = TF.result.get('type') == 'video'
+            if not is_video and 'name' in TF.result:
+                name = TF.result['name'].lower()
+                video_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.mpg', '.mpeg']
+                is_video = any(name.endswith(ext) for ext in video_extensions)
+                
+            if is_video:
                 total_files = 1
                 
                 # Use the TF object to get parameters that might change
@@ -662,18 +716,68 @@ def get_stream():
                 
                 files_data = [{
                     'name': TF.result.get('name', 'Unknown'),
-                    'type': TF.result.get('type', 'other'),
+                    'type': TF.result.get('type', 'video'),
                     'streaming_link': streaming_link,
                     'segments': segments
                 }]
             else:
-                return Response(
-                    response=json.dumps({
-                        'status': 'failed', 
-                        'message': 'The file is not a video and cannot be streamed'
-                    }),
-                    mimetype='application/json'
-                )
+                # Try as video anyway (sometimes files aren't properly marked)
+                try:
+                    TL = TeraboxLink(
+                        fs_id=TF.result['fs_id'],
+                        uk=TF.result['uk'],
+                        shareid=TF.result['shareid'],
+                        timestamp=TF.result['timestamp'],
+                        sign=TF.result['sign'],
+                        js_token=TF.result['js_token'],
+                        cookie=TF.result['cookie']
+                    )
+
+                    # Build streaming link with 1024tera.com format
+                    params = {
+                        'uk': TL.dynamic_params['uk'],
+                        'shareid': TL.dynamic_params['shareid'],
+                        'type': 'M3U8_FLV_264_480',
+                        'fid': TL.dynamic_params['fid_list'].strip('[]'),
+                        'sign': TL.dynamic_params['sign'],
+                        'timestamp': TL.dynamic_params['timestamp'],
+                        'jsToken': TL.dynamic_params['jsToken'],
+                        'esl': '1',
+                        'isplayer': '1',
+                        'ehps': '1',
+                        'clienttype': '0',
+                        'app_id': '250528',
+                        'web': '1',
+                        'channel': 'dubox'
+                    }
+
+                    streaming_link = 'https://www.1024tera.com/share/streaming?' + '&'.join([f'{a}={b}' for a,b in params.items()])
+                    segments = fetch_m3u8_segments(streaming_link)
+                    
+                    if segments:
+                        total_files = 1
+                        files_data = [{
+                            'name': TF.result.get('name', 'Unknown'),
+                            'type': 'video',  # Force type as video since we got segments
+                            'streaming_link': streaming_link,
+                            'segments': segments
+                        }]
+                    else:
+                        return Response(
+                            response=json.dumps({
+                                'status': 'failed', 
+                                'message': 'The file is not a video and cannot be streamed'
+                            }),
+                            mimetype='application/json'
+                        )
+                except Exception as e:
+                    return Response(
+                        response=json.dumps({
+                            'status': 'failed', 
+                            'message': f'The file is not a video and cannot be streamed: {str(e)}'
+                        }),
+                        mimetype='application/json'
+                    )
         elif TF.result.get('list'):
             # Process all files starting from root
             files_data = process_files(TF.result['list'])
